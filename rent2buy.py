@@ -1,53 +1,55 @@
 from bs4 import BeautifulSoup
 import re
 import requests
-import lxml
+from datetime import datetime
 
 
 def run(url):
-    currentCar = 0
-    # totalCars = 41441
-    totalCars = 40500
-
-    csvFile = open('rent2buy-cars.csv', 'w')
-    csvFile.write(
-        "saving,actualPrice,diff,make,odometer,year,model,bodyStyle,kbbPrice,state,city,extColor,intColor,carUrl,driveLine,transmission,cityFuelEconomy,engine,doors,vin,zipCode,driveTrain,classification,trim,uuid,accountId,available\n")
-    while currentCar < totalCars:
+    current_car = 0
+    total_cars = 1029
+    now = datetime.now()
+    dt_string = now.strftime("%d-%m-%Y_%H-%M-%S")
+    file_name = "rent2buy-cars" + dt_string + ".csv"
+    csv_file = open(file_name, 'w+')
+    csv_file.write(
+        "saving,actual_price,diff,make,odometer,year,model,body_style,kbb_price,state,city,ext_color,int_color,car_url,drive_line,transmission,city_fuel_economy,engine,doors,vin,zipCode,driveTrain,classification,trim,uuid,account_id\n")
+    while current_car < total_cars:
         # PageURL setup
-        if currentCar == 0:
-            pageUrl = url
+        if current_car == 0:
+            page_url = url
         else:
-            pageUrl = url + '?start=' + str(currentCar)
+            page_url = url + '&start=' + str(current_car)
 
         # Increase the current car
-        currentCar += 35
-        htmlContent = None
+        current_car += 35
+        html_content = None
         # retry 5 times
         for i in range(5):
             try:
-                response = requests.get(pageUrl, headers={
+                response = requests.get(page_url, headers={
                     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36'})
-                htmlContent = response.content
+                html_content = response.content
                 break
             except Exception as e:
                 print("Failed attempt: ", i)
 
         # If not get HTML content skip the page url
-        if not htmlContent:
+        if not html_content:
+            print("Cannot load HTML page for link: ", page_url)
             continue
 
         # Parse HTML Content
-        soup = BeautifulSoup(htmlContent.decode('ascii', 'ignore'), 'html.parser')
-        cars = soup.findAll('li', {'class': re.compile('item hproduct clearfix closed used fleet')})
+        soup = BeautifulSoup(html_content.decode('ascii', 'ignore'), 'html.parser')
+        cars = soup.findAll('li', {'class': re.compile('item hproduct clearfix closed certified primary')})
 
         # for each Car build parse data
         for car in cars:
-            accountId = car['data-accountid']
-            bodyStyle = car['data-bodystyle']
+            account_id = car['data-accountid']
+            body_style = car['data-bodystyle']
             city = car['data-city']
             classification = car['data-classification']
             doors = car['data-doors']
-            drivetrain = car['data-drivetrain']
+            drive_train = car['data-drivetrain']
             engine = car['data-engine']
             make = car['data-make']
             model = car['data-model']
@@ -57,35 +59,38 @@ def run(url):
             uuid = car['data-uuid']
             vin = car['data-vin']
             year = car['data-year']
-            zipcode = car['data-zipcode']
-            carUrl = 'https://www.hertzcarsales.com' + car.find('a', {'class': re.compile('url')})['href']
+            zip_code = car['data-zipcode']
+            drive_line = car['data-driveline']
+            city_fuel_economy = car['data-cityfueleconomy']
+            ext_color = car['data-exteriorcolor']
+            int_color = car['data-interiorcolor']
+            car_url = 'https://www.hertzcarsales.com' + car.find('a', {'class': re.compile('url')})['href']
             odometer = car.find('span', {'data-name': re.compile('odometer')}).span.text.split()[0].replace(',', '')
-            extColor = car.find('span', {'data-name': re.compile('exteriorColor')}).span.text
-            intColor = car.find('span', {'data-name': re.compile('interiorColor')}).span.text
-            driveLine = car.find('span', {'data-name': re.compile('driveLine')}).span.text
-            cityFuelEconomy = car.find('span', {'data-name': re.compile('cityFuelEconomy')}).span.text
-            inventoryDate = car.find('span', {'data-name': re.compile('inventoryDate')}).span.text
             prices = car.findAll('span', {'class': re.compile('value')})
-            kbbPrice = 0
-            diffPrice = 0
-            actualPrice = 0
+            kbb_price = 0
+            diff_price = 0
+            actual_price = 0
             saving = 0.0
             if len(prices) == 3:
-                kbbPrice = int(prices[0].text.strip().replace(',', '').replace('$', ''))
+                kbb_price = int(prices[0].text.strip().replace(',', '').replace('$', ''))
                 diff = int(prices[1].text.strip().replace(',', '').replace('$', ''))
-                actualPrice = int(prices[2].text.strip().replace(',', '').replace('$', ''))
-                saving = diff / kbbPrice * 100
+                actual_price = int(prices[2].text.strip().replace(',', '').replace('$', ''))
+                saving = diff / kbb_price * 100
             else:
-                actualPrice = int(prices[0].text.strip().replace(',', '').replace('$', ''))
-                kbbPrice = actualPrice
+                try:
+                    actual_price = int(prices[0].text.strip().replace(',', '').replace('$', ''))
+                    kbb_price = actual_price
+                except Exception as e:
+                    print("Failed to convert Integer: ", e)
+                diff = 0
             saving = round(saving, 2)
-            csvFile.write(
-                str(saving) + "," + str(actualPrice) + "," + str(
-                    diff) + "," + make + "," + odometer + "," + year + "," + model + "," + bodyStyle + "," + str(
-                    kbbPrice) + "," + state + "," + city + "," + extColor + "," + intColor + "," + carUrl + "," + driveLine + "," + transmission + "," + cityFuelEconomy + "," + engine + "," + doors + "," + vin + "," + zipcode + "," + drivetrain + "," + classification + "," + trim + "," + uuid + "," + accountId + "," + inventoryDate + "\n")
-    csvFile.close()
+            csv_file.write(
+                str(saving) + "," + str(actual_price) + "," + str(
+                    diff) + "," + make + "," + odometer + "," + year + "," + model + "," + body_style + "," + str(
+                    kbb_price) + "," + state + "," + city + "," + ext_color + "," + int_color + "," + car_url + "," + drive_line + "," + transmission + "," + city_fuel_economy + "," + engine + "," + doors + "," + vin + "," + zip_code + "," + drive_train + "," + classification + "," + trim + "," + uuid + "," + account_id + "\n")
+    csv_file.close()
 
 
 if __name__ == '__main__':
-    url = 'https://www.hertzcarsales.com/rent2buy-inventory/index.htm?geoZip=07306&geoRadius=5000'
-    run(url)
+    scrapping_url = 'https://www.hertzcarsales.com/used-cars-for-sale.htm?geoZip=07306&geoRadius=200&normalBodyStyle=SUV'
+    run(scrapping_url)
